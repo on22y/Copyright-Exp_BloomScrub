@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+results/
+*.json
+!data/final_dataset_*.json
+*.png
+*.pdf
+*.csv
