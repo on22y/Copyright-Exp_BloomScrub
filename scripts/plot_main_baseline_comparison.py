@@ -33,7 +33,10 @@ METHOD_LABELS = {
 
 RAW_METRICS = {
     "entity": "mean_entity_preservation",
+    "entity_relaxed": "mean_entity_preservation_relaxed",
     "nli": "mean_nli_entailment",
+    "bertscore": "mean_bertscore_f1",
+    "cosine": "mean_cosine_similarity",
     "contradiction": "mean_contradiction_rate",
     "fourgram": "mean_fourgram_overlap",
     "lcs": "mean_sentence_lcs_ratio",
@@ -352,9 +355,11 @@ def plot_main_paper_figure(
     fig.text(
         0.5,
         -0.04,
-        "Reading guide: right/up is better in Panels A-B. The x-axis uses overall rewrite quality, combining target rewrite rate with low residual target overlap. CRPTT achieves high-quality rewriting while preserving factual entities and reducing source overlap.",
+        "Reading guide: right/up is better in Panels A–B.  X-axis = Rewrite Quality: mean(Target Rewrite Rate, 1−Target Retention, 1−Target n-gram).  "
+        "Panel A Y-axis = Entity Preservation (NER-based fact recall).  Panel B Y-axis = Entity × Copyright Risk Mitigation (balanced fact + overlap reduction).  "
+        "CRPTT explicitly separates factual content from expressive targets before rewriting, achieving the best balance across all three evaluation axes.",
         ha="center",
-        fontsize=10.5,
+        fontsize=10.0,
         color="#111827",
     )
 
@@ -462,6 +467,9 @@ def plot_raw_key_metrics(summaries: Dict[str, Dict[str, float]], out_dir: Path, 
     panels: List[Tuple[str, List[Tuple[str, str, str]]]] = [
         ("Fact Preservation / Loss", [
             ("Entity ↑", "entity", "up"),
+            ("NLI ↑", "nli", "up"),
+            ("BERTScore F1 ↑", "bertscore", "up"),
+            ("Cosine Sim ↑", "cosine", "up"),
             ("Contradiction ↓", "contradiction", "down"),
         ]),
         ("Copyright Risk Mitigation", [
@@ -476,7 +484,9 @@ def plot_raw_key_metrics(summaries: Dict[str, Dict[str, float]], out_dir: Path, 
         ]),
     ]
 
-    fig, axes = plt.subplots(1, 3, figsize=(17, 5.6), constrained_layout=True)
+    fig = plt.figure(figsize=(24, 5.6), constrained_layout=True)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.65, 1.0, 1.0])
+    axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
     fig.suptitle("Raw Evaluation Metrics by Method", fontsize=17, y=1.05)
 
     for ax, (title, metrics) in zip(axes, panels):
@@ -514,16 +524,18 @@ def plot_score_heatmap(scores: Dict[str, Dict[str, float]], out_dir: Path, dpi: 
         method_order = _ALL_METHODS
     metrics = [
         "Fact Preservation",
+        "Copyright Risk Mitigation",
+        "Fact-Preserved Mitigation",
         "Expression Divergence (1 - 4gram)",
         "Expression Divergence (1 - LCS)",
-        "Expression Divergence (1 - ROUGE-L)",
         "Target Rewriting",
         "Balance Score",
     ]
     matrix = np.array([[scores[method][metric] for metric in metrics] for method in method_order])
 
     fig_h = max(4.8, 0.7 * len(method_order) + 2.5)
-    fig, ax = plt.subplots(figsize=(12.5, fig_h), constrained_layout=True)
+    fig_w = 2.0 * len(metrics) + 2.0
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), constrained_layout=True)
     im = ax.imshow(matrix, cmap="YlGnBu", vmin=0, vmax=1, aspect="auto")
     ax.set_title("Higher-is-Better Metric Matrix", fontsize=16, pad=16)
     ax.set_yticks(np.arange(len(method_order)))
@@ -551,7 +563,10 @@ def write_tables(
     raw_header = [
         "Method",
         "Entity ↑",
+        "Entity (rlx) ↑",
         "NLI ↑",
+        "BERTScore F1 ↑",
+        "Cosine Sim ↑",
         "Contradiction ↓",
         "4-gram ↓",
         "LCS ↓",
@@ -567,7 +582,10 @@ def write_tables(
         raw_rows.append([
             method,
             s["entity"],
+            s["entity_relaxed"],
             s["nli"],
+            s["bertscore"],
+            s["cosine"],
             s["contradiction"],
             s["fourgram"],
             s["lcs"],
@@ -625,10 +643,12 @@ def write_tables(
 {markdown_table(score_header, score_rows)}
 
 ## Score Definitions
-- Fact Preservation = Entity Preservation.
+- Fact Preservation = Entity Preservation (NER-based strict recall).
 - Copyright Risk Mitigation = mean(1 - 4-gram overlap, 1 - LCS ratio, 1 - ROUGE-L).
+- Fact-Preserved Mitigation = Fact Preservation × Copyright Risk Mitigation.
 - Target Rewriting = Target Rewrite Rate.
 - Balance Score = mean(Fact Preservation, Copyright Risk Mitigation, Target Rewriting).
+- Additional fact preservation metrics reported in raw table: Entity (relaxed), NLI Entailment, BERTScore F1, Cosine Similarity.
 
 ## Figure Files
 - `figure_0_main_baseline_comparison_paper.png`: paper-ready main figure showing the key trade-off and supporting metrics.

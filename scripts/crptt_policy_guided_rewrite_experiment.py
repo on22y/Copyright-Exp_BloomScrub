@@ -216,22 +216,33 @@ def compute_article_hash(text: str) -> str:
 
 
 def load_article_records(path: str, limit: int, sample_source: str) -> List[Dict[str, object]]:
-    article_records: List[Dict[str, object]] = []
+    raw_rows: List[Dict[str, object]] = []
     with open(path, "r", encoding="utf-8") as f:
-        for dataset_index, line in enumerate(f):
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            text = row.get("text", "").strip()
-            if not text:
-                continue
-            article_records.append(
-                {
-                    "dataset_index": dataset_index,
-                    "article_hash": compute_article_hash(text),
-                    "text": text,
-                }
-            )
+        first_char = f.read(1)
+        f.seek(0)
+        if first_char == "[":
+            # JSON array format (e.g. final_dataset_kor.json)
+            raw_rows = json.load(f)
+        else:
+            # JSONL format (one JSON object per line)
+            for line in f:
+                if not line.strip():
+                    continue
+                raw_rows.append(json.loads(line))
+
+    article_records: List[Dict[str, object]] = []
+    for dataset_index, row in enumerate(raw_rows):
+        # Support both full-article ("text") and sentence-level ("target_sentence") datasets
+        text = (row.get("text") or row.get("target_sentence") or "").strip()
+        if not text:
+            continue
+        article_records.append(
+            {
+                "dataset_index": dataset_index,
+                "article_hash": compute_article_hash(text),
+                "text": text,
+            }
+        )
 
     if sample_source == "start":
         return article_records[:limit]
@@ -1475,10 +1486,28 @@ def build_evaluation_axes_summary(summary: Dict[str, float]) -> Dict[str, List[D
                 "value": summary.get("mean_entity_preservation"),
             },
             {
+                "metric": "Entity Preservation (relaxed)",
+                "key": "mean_entity_preservation_relaxed",
+                "direction": "up",
+                "value": summary.get("mean_entity_preservation_relaxed"),
+            },
+            {
                 "metric": "NLI Entailment",
                 "key": "mean_nli_entailment",
                 "direction": "up",
                 "value": summary.get("mean_nli_entailment"),
+            },
+            {
+                "metric": "BERTScore F1",
+                "key": "mean_bertscore_f1",
+                "direction": "up",
+                "value": summary.get("mean_bertscore_f1"),
+            },
+            {
+                "metric": "Cosine Similarity",
+                "key": "mean_cosine_similarity",
+                "direction": "up",
+                "value": summary.get("mean_cosine_similarity"),
             },
             {
                 "metric": "Contradiction Rate",
