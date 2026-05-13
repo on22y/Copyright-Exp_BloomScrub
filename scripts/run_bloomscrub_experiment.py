@@ -376,8 +376,27 @@ def main() -> None:
         bertscore_model_name=args.bertscore_model or module.DEFAULT_BERTSCORE_MODEL
     )
 
-    article_results: List[Dict] = []
+    article_results: List[Dict] = module.load_checkpoint_articles(args.output_path)
+    processed_hashes = {
+        str(row.get("article_hash"))
+        for row in article_results
+        if row.get("article_hash")
+    }
+    processed_dataset_indices = {
+        int(row["dataset_index"])
+        for row in article_results
+        if row.get("dataset_index") is not None
+    }
+    if article_results:
+        print(f"Resuming from checkpoint: {args.output_path} ({len(article_results)} articles already saved)")
+
     for article_idx, article_record in enumerate(article_records):
+        article_hash = str(article_record["article_hash"])
+        dataset_index = int(article_record["dataset_index"])
+        if article_hash in processed_hashes or dataset_index in processed_dataset_indices:
+            print(f"[Article {article_idx}] skipped: already in checkpoint (dataset_index={dataset_index})")
+            continue
+
         sentence_rows = process_article_bloomscrub(
             module,
             client,
@@ -402,8 +421,8 @@ def main() -> None:
         )
         article_result["article_index"] = article_idx
         article_result["sample_index"] = article_idx
-        article_result["dataset_index"] = int(article_record["dataset_index"])
-        article_result["article_hash"] = str(article_record["article_hash"])
+        article_result["dataset_index"] = dataset_index
+        article_result["article_hash"] = article_hash
         article_result["sample_source"] = args.sample_source
         article_result["framework_mode"] = "bloomscrub"
         article_result["baseline_mode"] = "bloomscrub"
@@ -412,6 +431,8 @@ def main() -> None:
             if sentence_rows else 0.0
         )
         article_results.append(article_result)
+        processed_hashes.add(article_hash)
+        processed_dataset_indices.add(dataset_index)
 
         summary = summarize_with_usage(
             module,
